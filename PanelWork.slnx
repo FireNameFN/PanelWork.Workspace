@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="PanelWork.Test/PanelWork.Test.csproj" />
+  <Project Path="PanelWork/PanelWork.csproj" />
+  <Project Path="Thermal/Thermal.csproj" />
+</Solution>
