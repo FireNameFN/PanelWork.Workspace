@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Reflection;
 using ImageMagick;
 using SDL3;
+using Thermal.Bindings;
 using Thermal.Core;
 using Thermal.Extensions;
 using Thermal.Shaders;
@@ -97,10 +99,6 @@ ThPipeline texturePipeline = new ThPipelineLayout(textureShader.PipelineLayout, 
     VertexDescription = [new(0, VkFormat.R32G32Sfloat, 0), new(1, VkFormat.R32G32Sfloat, 8)]
 });
 
-ThDescriptorPool descriptorPool = device.CreateDescriptorPool(10);
-
-VkDescriptorSet textureSet = descriptorPool.AllocateDescriptorSet(textureShader.SetLayout);
-
 ThSampler sampler = device.CreateSampler(VkFilter.Nearest, VkSamplerAddressMode.Repeat);
 
 device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(128, 128), 1, VkImageUsageFlags.TransferDst | VkImageUsageFlags.Sampled, VkImageLayout.Undefined, VkMemoryPropertyFlags.DeviceLocal, out ThImage texture, out ThDeviceMemory textureMemory);
@@ -185,22 +183,9 @@ unsafe {
 
 ThImageView textureView = texture.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba, new(VkImageAspectFlags.Color));
 
-VkDescriptorImageInfo imageInfo = new() {
-    sampler = sampler.Handle,
-    imageView = textureView.Handle,
-    imageLayout = VkImageLayout.ShaderReadOnlyOptimal
-};
+DescriptorStorage storage = new(device);
 
-unsafe {
-    VkWriteDescriptorSet writeSet = new() {
-        dstSet = textureSet,
-        descriptorCount = 1,
-        descriptorType = VkDescriptorType.CombinedImageSampler,
-        pImageInfo = &imageInfo
-    };
-
-    device.Handle.vkUpdateDescriptorSets(writeSet);
-}
+DescriptorStorageContext storageContext = storage.CreateContext();
 
 VertexBuffer<Vertex> vertexBuffer = new(device, physicalDevice);
 
@@ -331,6 +316,18 @@ while(running) {
 
     device.Handle.vkCmdBindPipeline(commandBuffer.Handle, VkPipelineBindPoint.Graphics, texturePipeline.Handle);
 
+    long t1 = Stopwatch.GetTimestamp();
+
+    storageContext.ClearBindings();
+
+    storageContext.AddBinding(new ThImageSamplerBinding(sampler.Handle, textureView.Handle, VkImageLayout.ShaderReadOnlyOptimal));
+
+    VkDescriptorSet textureSet = storageContext.CreateDescriptorSet(textureShader.SetLayouts[0]);
+
+    long t2 = Stopwatch.GetTimestamp();
+
+    Console.WriteLine($"Storage {(t2 - t1) * 1000000d / Stopwatch.Frequency}");
+
     device.Handle.vkCmdBindDescriptorSets(commandBuffer.Handle, VkPipelineBindPoint.Graphics, textureShader.PipelineLayout, 0, textureSet);
 
     device.Handle.vkCmdDraw(commandBuffer.Handle, 4, 1, textureIndex, 0);
@@ -374,6 +371,8 @@ while(running) {
     fence.Wait();
 
     fence.Reset();
+
+    storage.Clear();
 
     Console.WriteLine("Frame");
 }
