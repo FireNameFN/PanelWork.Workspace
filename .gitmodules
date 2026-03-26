@@ -1,3 +1,6 @@
 [submodule "Thermal"]
 	path = Thermal
 	url = https://github.com/FireNameFN/Thermal
+[submodule "GreenPng"]
+	path = GreenPng
+	url = https://github.com/FireNameFN/GreenPng

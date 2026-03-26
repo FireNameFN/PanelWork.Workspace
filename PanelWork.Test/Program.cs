@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Reflection;
-using ImageMagick;
+using GreenPng;
 using SDL3;
 using Thermal.Bindings;
 using Thermal.Core;
@@ -101,29 +101,35 @@ ThPipeline texturePipeline = new ThPipelineLayout(textureShader.PipelineLayout, 
 
 ThSampler sampler = device.CreateSampler(VkFilter.Nearest, VkSamplerAddressMode.Repeat);
 
-device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(128, 128), 1, VkImageUsageFlags.TransferDst | VkImageUsageFlags.Sampled, VkImageLayout.Undefined, VkMemoryPropertyFlags.DeviceLocal, out ThImage texture, out ThDeviceMemory textureMemory);
-
-ThDeviceBuffer buffer = device.AllocateBuffer(physicalDevice, VkBufferUsageFlags.TransferSrc, VkMemoryPropertyFlags.HostVisible | VkMemoryPropertyFlags.HostCoherent, 128*128*4);
-
 Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Test.Resources.OverGreen.png");
 
 Span<byte> span = stackalloc byte[(int)stream.Length];
 
 stream.ReadExactly(span);
 
-MagickImage decoder = new(span);
+Stream trayStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Test.Resources.tray.png");
 
-ReadOnlySpan<byte> pixels = decoder.GetPixels().ToByteArray(PixelMapping.BGRA);
+Span<byte> traySpan = stackalloc byte[(int)trayStream.Length];
 
-decoder.Resize(24, 24);
+trayStream.ReadExactly(traySpan);
 
-ReadOnlySpan<byte> smol = decoder.GetPixels().ToByteArray(PixelMapping.BGRA);
+PngDecoder.TryDecodeHeader(span, out PngHeader header);
+
+Span<byte> pixels = stackalloc byte[header.ByteSize];
+
+PngDecoder.TryDecode(span, header, pixels);
+
+PngDecoder.TryDecodeHeader(traySpan, out PngHeader trayHeader);
+
+Span<byte> trayPixels = stackalloc byte[trayHeader.ByteSize];
+
+PngDecoder.TryDecode(traySpan, trayHeader, trayPixels);
 
 nint icon;
 
 unsafe {
-    fixed(byte* pixelsPointer = smol)
-        icon = SDL.CreateSurfaceFrom(24, 24, SDL.PixelFormat.ARGB8888, (nint)pixelsPointer, 24 * 4);
+    fixed(byte* pixelsPointer = trayPixels)
+        icon = SDL.CreateSurfaceFrom(16, 16, SDL.PixelFormat.ARGB8888, (nint)pixelsPointer, 16 * 4);
 }
 
 nint tray = SDL.CreateTray(icon, "dfg");
@@ -136,52 +142,9 @@ SDL.SetTrayEntryCallback(entry, (entry, user) => {
     Console.WriteLine("Click");
 }, 0);
 
-buffer.DeviceMemory.CopyFrom(pixels);
+ThDeviceImage texture = pool.CreateTexture(device, physicalDevice, queue, fence, pixels, header.Width, header.Height);
 
-VkBufferImageCopy imageCopy = new() {
-    bufferRowLength = 128,
-    bufferImageHeight = 128,
-    imageSubresource = new(VkImageAspectFlags.Color, 0, 0, 1),
-    imageExtent = new(128, 128, 1)
-};
-
-unsafe {
-    ThCommandBuffer temp = pool.AllocateCommandBuffer(VkCommandBufferLevel.Primary);
-
-    device.Handle.vkBeginCommandBuffer(temp.Handle, VkCommandBufferUsageFlags.OneTimeSubmit);
-
-    temp.ImageBarrier(texture.Handle, new() {
-        SrcAccess = VkAccessFlags.None,
-        DstAccess = VkAccessFlags.TransferWrite,
-        OldLayout = VkImageLayout.Undefined,
-        NewLayout = VkImageLayout.TransferDstOptimal,
-        SrcStage = VkPipelineStageFlags.TopOfPipe,
-        DstStage = VkPipelineStageFlags.Transfer
-    });
-
-    device.Handle.vkCmdCopyBufferToImage(temp.Handle, buffer.BufferHandle, texture.Handle, VkImageLayout.TransferDstOptimal, 1, &imageCopy);
-
-    temp.ImageBarrier(texture.Handle, new() {
-        SrcAccess = VkAccessFlags.TransferWrite,
-        DstAccess = VkAccessFlags.ShaderRead,
-        OldLayout = VkImageLayout.TransferDstOptimal,
-        NewLayout = VkImageLayout.ShaderReadOnlyOptimal,
-        SrcStage = VkPipelineStageFlags.Transfer,
-        DstStage = VkPipelineStageFlags.FragmentShader
-    });
-
-    device.Handle.vkEndCommandBuffer(temp.Handle);
-
-    queue.Submit(fence.Handle, [], [], [temp.Handle], []);
-
-    fence.Wait();
-
-    fence.Reset();
-
-    device.Handle.vkResetCommandBuffer(temp.Handle, VkCommandBufferResetFlags.ReleaseResources);
-}
-
-ThImageView textureView = texture.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba, new(VkImageAspectFlags.Color));
+ThImageView textureView = texture.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba, new(VkImageAspectFlags.Color));
 
 DescriptorStorage storage = new(device);
 
