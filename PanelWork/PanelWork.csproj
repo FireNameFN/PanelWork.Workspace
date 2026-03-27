@@ -6,6 +6,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="SDL3-CS" Version="3.4.2" />
+    <PackageReference Include="SDL3-CS.Native" Version="3.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Thermal\Thermal.csproj" />
     <ProjectReference Include="..\GreenPng\GreenPng\GreenPng.csproj" />
   </ItemGroup>

@@ -3,14 +3,15 @@ using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using GreenPng;
+using PanelWork;
 using SDL3;
 using Thermal.Bindings;
 using Thermal.Core;
 using Thermal.Extensions;
 using Thermal.Shaders;
 using Thermal.ThVk;
-using Thermal.Window;
 using Vortice.Vulkan;
 
 Console.WriteLine("Hello, World!");
@@ -23,21 +24,13 @@ string[] extensions = SDL.VulkanGetInstanceExtensions(out _);
 
 ThInstance instance = ThInstance.Create(VkVersion.Version_1_2, ["VK_LAYER_KHRONOS_validation"], extensions);
 
-ThPhysicalDevice physicalDevice;
+ThDeviceFeatures features = new() {
+    ExtendedDynamicState = true
+};
 
-ThDevice device;
+instance.TryCreateDevicePreferDiscrete((instance, physicalDevice, queueFamily, flags) => SDL.VulkanGetPresentationSupport(instance, physicalDevice, queueFamily), ["VK_KHR_swapchain", "VK_EXT_extended_dynamic_state"], features, out ThPhysicalDevice physicalDevice, out ThDevice device, out ThQueue queue);
 
-ThQueue queue;
-
-unsafe {
-    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeature = new() {
-        extendedDynamicState = true
-    };
-
-    instance.TryCreateDevicePreferDiscrete(VkQueueFlags.Graphics, true, ["VK_KHR_swapchain", "VK_EXT_extended_dynamic_state"], &extendedDynamicStateFeature, out physicalDevice, out device, out queue);
-}
-
-Window window = new();
+Window window = new(flags: SDL.WindowFlags.Resizable);
 
 VkSurfaceKHR surface = window.CreateSurface(instance.Handle.Instance);
 
@@ -132,7 +125,7 @@ unsafe {
         icon = SDL.CreateSurfaceFrom(16, 16, SDL.PixelFormat.ARGB8888, (nint)pixelsPointer, 16 * 4);
 }
 
-nint tray = SDL.CreateTray(icon, "dfg");
+nint tray = SDL.CreateTray(icon, "PanelWork");
 
 nint menu = SDL.CreateTrayMenu(tray);
 
@@ -241,19 +234,7 @@ while(running) {
 
     device.Handle.vkBeginCommandBuffer(commandBuffer.Handle, VkCommandBufferUsageFlags.OneTimeSubmit);
 
-    VkClearValue color = new(0, 1, 0);
-
-    unsafe {
-        VkRenderPassBeginInfo passInfo = new() {
-            renderPass = renderPass.Handle,
-            framebuffer = framebuffer.Handle,
-            renderArea = new(0, 0, (uint)width, (uint)height),
-            clearValueCount = 1,
-            pClearValues = &color
-        };
-
-        device.Handle.vkCmdBeginRenderPass(commandBuffer.Handle, &passInfo, VkSubpassContents.Inline);
-    }
+    commandBuffer.BeginRenderPass(renderPass.Handle, framebuffer.Handle, new(0, 0, (uint)width, (uint)height), new(0, 1, 0), VkSubpassContents.Inline);
 
     device.Handle.vkCmdSetViewport(commandBuffer.Handle, 0, new VkViewport(width, height));
 
@@ -271,9 +252,7 @@ while(running) {
 
     Vector4 solidColor = new(1, 0, 1, 1);
 
-    unsafe {
-        device.Handle.vkCmdPushConstants(commandBuffer.Handle, solidShader.PipelineLayout, VkShaderStageFlags.Fragment, 0, 16, &solidColor);
-    }
+    commandBuffer.PushConstants(solidShader.PipelineLayout, VkShaderStageFlags.Fragment, 0, MemoryMarshal.AsBytes([solidColor]));
 
     device.Handle.vkCmdDraw(commandBuffer.Handle, 4, 1, solidIndex, 0);
 
@@ -312,9 +291,7 @@ while(running) {
         extent = new(width, height, 1)
     };
 
-    unsafe {
-        device.Handle.vkCmdCopyImage(commandBuffer.Handle, renderTarget.Handle, VkImageLayout.TransferSrcOptimal, image.Handle, VkImageLayout.TransferDstOptimal, 1, &copy);
-    }
+    commandBuffer.CopyImage(renderTarget.Handle, VkImageLayout.TransferSrcOptimal, image.Handle, VkImageLayout.TransferDstOptimal, copy);
 
     commandBuffer.ImageBarrier(image.Handle, new() {
         SrcAccess = VkAccessFlags.TransferWrite,
