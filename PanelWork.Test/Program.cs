@@ -112,20 +112,9 @@ Span<byte> pixels = stackalloc byte[header.ByteSize];
 
 PngDecoder.TryDecode(span, header, pixels);
 
-PngDecoder.TryDecodeHeader(traySpan, out PngHeader trayHeader);
+Icon icon = Icon.CreateFromPng(traySpan);
 
-Span<byte> trayPixels = stackalloc byte[trayHeader.ByteSize];
-
-PngDecoder.TryDecode(traySpan, trayHeader, trayPixels);
-
-nint icon;
-
-unsafe {
-    fixed(byte* pixelsPointer = trayPixels)
-        icon = SDL.CreateSurfaceFrom(16, 16, SDL.PixelFormat.ARGB8888, (nint)pixelsPointer, 16 * 4);
-}
-
-nint tray = SDL.CreateTray(icon, "PanelWork");
+nint tray = SDL.CreateTray(icon.Handle, "PanelWork");
 
 nint menu = SDL.CreateTrayMenu(tray);
 
