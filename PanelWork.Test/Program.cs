@@ -10,6 +10,7 @@ using SDL3;
 using Thermal.Bindings;
 using Thermal.Core;
 using Thermal.Extensions;
+using Thermal.Meshes;
 using Thermal.Shaders;
 using Thermal.ThVk;
 using Vortice.Vulkan;
@@ -38,15 +39,17 @@ Presenter presenter = new(device, physicalDevice, queue, surface) {
     Usage = VkImageUsageFlags.TransferDst
 };
 
-ThCommandPool pool = device.CreateCommmandPool(VkCommandPoolCreateFlags.ResetCommandBuffer, queue.QueueFamily);
+ThCommandPool pool = device.CreateCommmandPool(queue.QueueFamily);
 
 ThCommandBuffer commandBuffer = pool.AllocateCommandBuffer(VkCommandBufferLevel.Primary);
 
+Command command = new(device, queue);
+
 ThFence fence = device.CreateFence();
 
-device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment, VkImageLayout.Undefined, VkMemoryPropertyFlags.DeviceLocal, out ThImage renderTarget, out ThDeviceMemory memory);
+ThDeviceImage renderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment, VkImageLayout.Undefined, VkMemoryPropertyFlags.DeviceLocal);
 
-ThImageView view = renderTarget.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba, new(VkImageAspectFlags.Color));
+ThImageView view = renderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba, new(VkImageAspectFlags.Color));
 
 ThRenderPass renderPass = device.CreateRenderPass(new() {
     format = VkFormat.B8G8R8A8Srgb,
@@ -61,36 +64,27 @@ ThRenderPass renderPass = device.CreateRenderPass(new() {
 
 ThFramebuffer framebuffer = renderPass.CreateFramebuffer([view.Handle], 1280, 720);
 
-ShaderCompiler shaderCompiler = new(device.Handle);
+ShaderBuilder shaderBuilder = new(device);
 
-ShaderObject vertexShader = shaderCompiler.CompileVertex();
+VertexShaderLayout vertexShader = shaderBuilder.BuildVertex();
 
-ShaderObject testShader = shaderCompiler.CompileTest();
+ShaderLayout testShader = shaderBuilder.BuildTest();
 
-ShaderObject solidShader = shaderCompiler.CompileSolid();
+ShaderLayout solidShader = shaderBuilder.BuildSolid();
 
-ShaderObject textureShader = shaderCompiler.CompileTexture();
+ShaderLayout textureShader = shaderBuilder.BuildTexture();
 
-ThPipeline testPipeline = new ThPipelineLayout(testShader.PipelineLayout, device.Handle).CreateGraphicsPipeline(renderPass.Handle, new() {
-    VertexShader = vertexShader.ShaderModule,
-    FragmentShader = testShader.ShaderModule,
-    VertexSize = 16,
-    VertexDescription = [new(0, VkFormat.R32G32Sfloat, 0), new(1, VkFormat.R32G32Sfloat, 8)]
-});
+PipelineLayout testLayout = PipelineLayout.Create(device, vertexShader, testShader);
 
-ThPipeline solidPipeline = new ThPipelineLayout(solidShader.PipelineLayout, device.Handle).CreateGraphicsPipeline(renderPass.Handle, new() {
-    VertexShader = vertexShader.ShaderModule,
-    FragmentShader = solidShader.ShaderModule,
-    VertexSize = 16,
-    VertexDescription = [new(0, VkFormat.R32G32Sfloat, 0), new(1, VkFormat.R32G32Sfloat, 8)]
-});
+PipelineLayout solidLayout = PipelineLayout.Create(device, vertexShader, solidShader);
 
-ThPipeline texturePipeline = new ThPipelineLayout(textureShader.PipelineLayout, device.Handle).CreateGraphicsPipeline(renderPass.Handle, new() {
-    VertexShader = vertexShader.ShaderModule,
-    FragmentShader = textureShader.ShaderModule,
-    VertexSize = 16,
-    VertexDescription = [new(0, VkFormat.R32G32Sfloat, 0), new(1, VkFormat.R32G32Sfloat, 8)]
-});
+PipelineLayout textureLayout = PipelineLayout.Create(device, vertexShader, textureShader);
+
+ThPipeline testPipeline = testLayout.CreatePipeline(renderPass.Handle);
+
+ThPipeline solidPipeline = solidLayout.CreatePipeline(renderPass.Handle);
+
+ThPipeline texturePipeline = textureLayout.CreatePipeline(renderPass.Handle);
 
 ThSampler sampler = device.CreateSampler(VkFilter.Nearest, VkSamplerAddressMode.Repeat);
 
@@ -124,7 +118,7 @@ SDL.SetTrayEntryCallback(entry, (entry, user) => {
     Console.WriteLine("Click");
 }, 0);
 
-ThDeviceImage texture = pool.CreateTexture(device, physicalDevice, queue, fence, pixels, header.Width, header.Height);
+ThDeviceImage texture = command.CreateTexture(physicalDevice, pixels, header.Width, header.Height);
 
 ThImageView textureView = texture.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba, new(VkImageAspectFlags.Color));
 
@@ -134,41 +128,17 @@ DescriptorStorageContext storageContext = storage.CreateContext();
 
 VertexBuffer<Vertex> vertexBuffer = new(device, physicalDevice);
 
-Vertex v1 = new() { Position = new(-0.5f, -0.5f), Offset = new(0, 0) };
-Vertex v2 = new() { Position = new(-0.5f, 0.5f), Offset = new(0, 1) };
-Vertex v3 = new() { Position = new(0.5f, -0.5f), Offset = new(1, 0) };
-Vertex v4 = new() { Position = new(0.5f, 0.5f), Offset = new(1, 1) };
+Rect testRect = new(-0.5f, -0.5f, 0.5f, 0.5f);
 
-vertexBuffer.AddVertex(v1);
-vertexBuffer.AddVertex(v2);
-vertexBuffer.AddVertex(v3);
-vertexBuffer.AddVertex(v4);
+Rect solidRect = new(-1f, -1f, -0.9f, -0.9f);
 
-uint testIndex = vertexBuffer.Push();
+Rect textureRect = new(-0.20f, -0.20f, 0.20f, 0.20f);
 
-v1 = new() { Position = new(-1f, -1f), Offset = new(0, 0) };
-v2 = new() { Position = new(-1f, -0.9f), Offset = new(0, 1) };
-v3 = new() { Position = new(-0.9f, -1f), Offset = new(1, 0) };
-v4 = new() { Position = new(-0.9f, -0.9f), Offset = new(1, 1) };
+uint testIndex = testRect.AddVertices(vertexBuffer);
 
-vertexBuffer.AddVertex(v1);
-vertexBuffer.AddVertex(v2);
-vertexBuffer.AddVertex(v3);
-vertexBuffer.AddVertex(v4);
+uint solidIndex = solidRect.AddVertices(vertexBuffer);
 
-uint solidIndex = vertexBuffer.Push();
-
-v1 = new() { Position = new(-0.20f, -0.20f), Offset = new(0, 0) };
-v2 = new() { Position = new(-0.20f, 0.20f), Offset = new(0, 1) };
-v3 = new() { Position = new(0.20f, -0.20f), Offset = new(1, 0) };
-v4 = new() { Position = new(0.20f, 0.20f), Offset = new(1, 1) };
-
-vertexBuffer.AddVertex(v1);
-vertexBuffer.AddVertex(v2);
-vertexBuffer.AddVertex(v3);
-vertexBuffer.AddVertex(v4);
-
-uint textureIndex = vertexBuffer.Push();
+uint textureIndex = textureRect.AddVertices(vertexBuffer);
 
 vertexBuffer.Flush();
 
@@ -197,11 +167,9 @@ while(running) {
 
             renderTarget.Dispose();
 
-            memory.Dispose();
+            renderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(width, height), 1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment, VkImageLayout.Undefined, VkMemoryPropertyFlags.DeviceLocal);
 
-            device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(width, height), 1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment, VkImageLayout.Undefined, VkMemoryPropertyFlags.DeviceLocal, out renderTarget, out memory);
-
-            view = renderTarget.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba, new(VkImageAspectFlags.Color));
+            view = renderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba, new(VkImageAspectFlags.Color));
 
             framebuffer = renderPass.CreateFramebuffer([view.Handle], (uint)width, (uint)height);
 
@@ -241,7 +209,7 @@ while(running) {
 
     Vector4 solidColor = new(1, 0, 1, 1);
 
-    commandBuffer.PushConstants(solidShader.PipelineLayout, VkShaderStageFlags.Fragment, 0, MemoryMarshal.AsBytes([solidColor]));
+    commandBuffer.PushConstants(solidLayout.Handle.Handle, VkShaderStageFlags.Fragment, 0, MemoryMarshal.AsBytes([solidColor]));
 
     device.Handle.vkCmdDraw(commandBuffer.Handle, 4, 1, solidIndex, 0);
 
@@ -259,7 +227,7 @@ while(running) {
 
     Console.WriteLine($"Storage {(t2 - t1) * 1000000d / Stopwatch.Frequency}");
 
-    device.Handle.vkCmdBindDescriptorSets(commandBuffer.Handle, VkPipelineBindPoint.Graphics, textureShader.PipelineLayout, 0, textureSet);
+    device.Handle.vkCmdBindDescriptorSets(commandBuffer.Handle, VkPipelineBindPoint.Graphics, textureLayout.Handle.Handle, 0, textureSet);
 
     device.Handle.vkCmdDraw(commandBuffer.Handle, 4, 1, textureIndex, 0);
 
@@ -280,7 +248,7 @@ while(running) {
         extent = new(width, height, 1)
     };
 
-    commandBuffer.CopyImage(renderTarget.Handle, VkImageLayout.TransferSrcOptimal, image.Handle, VkImageLayout.TransferDstOptimal, copy);
+    commandBuffer.CopyImage(renderTarget.Image.Handle, VkImageLayout.TransferSrcOptimal, image.Handle, VkImageLayout.TransferDstOptimal, copy);
 
     commandBuffer.ImageBarrier(image.Handle, new() {
         SrcAccess = VkAccessFlags.TransferWrite,
@@ -301,15 +269,11 @@ while(running) {
 
     fence.Reset();
 
+    pool.Reset();
+
     storage.Clear();
 
     Console.WriteLine("Frame");
 }
 
 Console.WriteLine("End");
-
-struct Vertex {
-    public Vector2 Position;
-
-    public Vector2 Offset;
-}
