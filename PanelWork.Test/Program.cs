@@ -128,25 +128,19 @@ DescriptorStorageContext storageContext = storage.CreateContext();
 
 VertexBuffer<Vertex> vertexBuffer = new(device, physicalDevice);
 
-Rect testRect = new(-0.5f, -0.5f, 0.5f, 0.5f);
+Rect testRect = Rect.Create(-0.5f, -0.5f, 0.5f, 0.5f);
 
-Rect solidRect = new(-1f, -1f, -0.9f, -0.9f);
+Rect solidRect = Rect.Create(-1f, -1f, -0.9f, -0.9f);
 
-Rect textureRect = new(-0.20f, -0.20f, 0.20f, 0.20f);
-
-uint testIndex = testRect.AddVertices(vertexBuffer);
-
-uint solidIndex = solidRect.AddVertices(vertexBuffer);
-
-uint textureIndex = textureRect.AddVertices(vertexBuffer);
-
-vertexBuffer.Flush();
+Rect textureRect = Rect.Create(-0.20f, -0.20f, 0.20f, 0.20f);
 
 presenter.SetSize(1280, 720);
 
 int width = 1280;
 
 int height = 720;
+
+float angle = 0;
 
 bool running = true;
 
@@ -188,6 +182,14 @@ while(running) {
 
         continue;
     }
+
+    uint testIndex = testRect.AddVertices(vertexBuffer);
+
+    uint solidIndex = solidRect.AddVertices(vertexBuffer);
+
+    uint textureIndex = textureRect.AddVertices(vertexBuffer);
+
+    vertexBuffer.Flush();
 
     device.Handle.vkBeginCommandBuffer(commandBuffer.Handle, VkCommandBufferUsageFlags.OneTimeSubmit);
 
@@ -272,6 +274,12 @@ while(running) {
     pool.Reset();
 
     storage.Clear();
+
+    vertexBuffer.Clear();
+
+    textureRect = Rect.Create(-0.20f, -0.20f, 0.20f, 0.20f, angle * MathF.Tau / 360);
+
+    angle += 0.2f;
 
     Console.WriteLine("Frame");
 }
