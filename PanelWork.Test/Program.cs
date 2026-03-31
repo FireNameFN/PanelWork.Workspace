@@ -221,7 +221,7 @@ while(running) {
 
     storageContext.AddBinding(new ThImageSamplerBinding(sampler.Handle, textureView.Handle, VkImageLayout.ShaderReadOnlyOptimal));
 
-    VkDescriptorSet textureSet = storageContext.CreateDescriptorSet(textureShader.SetLayouts[0]);
+    VkDescriptorSet textureSet = storageContext.GetDescriptorSet(textureShader.SetLayouts[0]);
 
     long t2 = Stopwatch.GetTimestamp();
 
