@@ -10,6 +10,7 @@ using SDL3;
 using Thermal.Bindings;
 using Thermal.Core;
 using Thermal.Extensions;
+using Thermal.Fonts;
 using Thermal.Meshes;
 using Thermal.Shaders;
 using Thermal.ThVk;
@@ -47,9 +48,9 @@ Command command = new(device, queue);
 
 ThFence fence = device.CreateFence();
 
-ThDeviceImage renderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment, VkImageLayout.Undefined, VkMemoryPropertyFlags.DeviceLocal);
+ThDeviceImage renderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment);
 
-ThImageView view = renderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba, new(VkImageAspectFlags.Color));
+ThImageView view = renderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
 ThRenderPass renderPass = device.CreateRenderPass(new() {
     format = VkFormat.B8G8R8A8Srgb,
@@ -88,23 +89,11 @@ ThPipeline texturePipeline = textureLayout.CreatePipeline(renderPass.Handle);
 
 ThSampler sampler = device.CreateSampler(VkFilter.Nearest, VkSamplerAddressMode.Repeat);
 
-Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Test.Resources.OverGreen.png");
-
-Span<byte> span = stackalloc byte[(int)stream.Length];
-
-stream.ReadExactly(span);
-
 Stream trayStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Test.Resources.tray.png");
 
 Span<byte> traySpan = stackalloc byte[(int)trayStream.Length];
 
 trayStream.ReadExactly(traySpan);
-
-PngDecoder.TryDecodeHeader(span, out PngHeader header);
-
-Span<byte> pixels = stackalloc byte[header.ByteSize];
-
-PngDecoder.TryDecode(span, header, pixels);
 
 Icon icon = Icon.CreateFromPng(traySpan);
 
@@ -118,9 +107,40 @@ SDL.SetTrayEntryCallback(entry, (entry, user) => {
     Console.WriteLine("Click");
 }, 0);
 
-ThDeviceImage texture = command.CreateTexture(physicalDevice, pixels, header.Width, header.Height);
+Atlas atlas = new(512, 512);
 
-ThImageView textureView = texture.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba, new(VkImageAspectFlags.Color));
+foreach(string name in Assembly.GetExecutingAssembly().GetManifestResourceNames()) {
+    if(!name.StartsWith("PanelWork.Test.Resources.textures."))
+        continue;
+
+    using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name);
+
+    byte[] data = new byte[stream.Length];
+
+    stream.ReadExactly(data);
+
+    byte[] pixels = PngDecoder.Decode(data, out PngHeader header);
+
+    atlas.Add(pixels, header.Width, header.Height);
+}
+
+ThDeviceImage texture = atlas.CreateTexture(command, physicalDevice);
+
+Stream fontStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Test.Resources.inter.ttf");
+
+byte[] fontData = new byte[fontStream.Length];
+
+fontStream.ReadExactly(fontData);
+
+FontFactory fontFactory = new();
+
+Font font = fontFactory.CreateFont(fontData);
+
+FontMap map = font.Render(command, physicalDevice, 24);
+
+ThImageView fontTexture = map.Image.Image.CreateImageView(VkFormat.R8Srgb, new(VkComponentSwizzle.R, VkComponentSwizzle.G, VkComponentSwizzle.B, VkComponentSwizzle.One));
+
+ThImageView textureView = texture.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
 DescriptorStorage storage = new(device);
 
@@ -128,11 +148,11 @@ DescriptorStorageContext storageContext = storage.CreateContext();
 
 VertexBuffer<Vertex> vertexBuffer = new(device, physicalDevice);
 
-Rect testRect = Rect.Create(-0.5f, -0.5f, 0.5f, 0.5f);
+float ratio = 1280f / 720;
+
+Rect testRect = Rect.Create(-0.5f, -0.5f, 0.5f, 0.5f, ratio);
 
 Rect solidRect = Rect.Create(-1f, -1f, -0.9f, -0.9f);
-
-Rect textureRect = Rect.Create(-0.20f, -0.20f, 0.20f, 0.20f);
 
 presenter.SetSize(1280, 720);
 
@@ -161,9 +181,9 @@ while(running) {
 
             renderTarget.Dispose();
 
-            renderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(width, height), 1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment, VkImageLayout.Undefined, VkMemoryPropertyFlags.DeviceLocal);
+            renderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(width, height), 1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment);
 
-            view = renderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba, new(VkImageAspectFlags.Color));
+            view = renderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
             framebuffer = renderPass.CreateFramebuffer([view.Handle], (uint)width, (uint)height);
 
@@ -182,6 +202,8 @@ while(running) {
 
         continue;
     }
+
+    Rect textureRect = Rect.Create(-0.5f, -0.5f, 0.5f, 0.5f, ratio, angle * MathF.Tau / 360);
 
     uint testIndex = testRect.AddVertices(vertexBuffer);
 
@@ -221,7 +243,7 @@ while(running) {
 
     storageContext.ClearBindings();
 
-    storageContext.AddBinding(new ThImageSamplerBinding(sampler.Handle, textureView.Handle, VkImageLayout.ShaderReadOnlyOptimal));
+    storageContext.AddBinding(new ThImageSamplerBinding(sampler.Handle, textureView.Handle));
 
     VkDescriptorSet textureSet = storageContext.GetDescriptorSet(textureShader.SetLayouts[0]);
 
@@ -232,6 +254,16 @@ while(running) {
     device.Handle.vkCmdBindDescriptorSets(commandBuffer.Handle, VkPipelineBindPoint.Graphics, textureLayout.Handle.Handle, 0, textureSet);
 
     device.Handle.vkCmdDraw(commandBuffer.Handle, 4, 1, textureIndex, 0);
+
+    storageContext.ClearBindings();
+
+    storageContext.AddBinding(new ThImageSamplerBinding(sampler.Handle, fontTexture.Handle));
+
+    textureSet = storageContext.GetDescriptorSet(textureShader.SetLayouts[0]);
+
+    device.Handle.vkCmdBindDescriptorSets(commandBuffer.Handle, VkPipelineBindPoint.Graphics, textureLayout.Handle.Handle, 0, textureSet);
+
+    device.Handle.vkCmdDraw(commandBuffer.Handle, 4, 1, testIndex, 0);
 
     device.Handle.vkCmdEndRenderPass(commandBuffer.Handle);
 
@@ -276,8 +308,6 @@ while(running) {
     storage.Clear();
 
     vertexBuffer.Clear();
-
-    textureRect = Rect.Create(-0.20f, -0.20f, 0.20f, 0.20f, angle * MathF.Tau / 360);
 
     angle += 0.2f;
 
