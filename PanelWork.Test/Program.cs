@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using GreenPng;
 using PanelWork;
 using SDL3;
@@ -81,11 +79,11 @@ PipelineLayout solidLayout = PipelineLayout.Create(device, vertexShader, solidSh
 
 PipelineLayout textureLayout = PipelineLayout.Create(device, vertexShader, textureShader);
 
-ThPipeline testPipeline = testLayout.CreatePipeline(renderPass.Handle);
+Pipeline testPipeline = testLayout.CreatePipeline(renderPass.Handle);
 
-ThPipeline solidPipeline = solidLayout.CreatePipeline(renderPass.Handle);
+Pipeline solidPipeline = solidLayout.CreatePipeline(renderPass.Handle);
 
-ThPipeline texturePipeline = textureLayout.CreatePipeline(renderPass.Handle);
+Pipeline texturePipeline = textureLayout.CreatePipeline(renderPass.Handle);
 
 ThSampler sampler = device.CreateSampler(VkFilter.Nearest, VkSamplerAddressMode.Repeat);
 
@@ -156,6 +154,10 @@ Rect solidRect = Rect.Create(-1f, -1f, -0.9f, -0.9f);
 
 presenter.SetSize(1280, 720);
 
+DrawContext context = new(device, storage.CreateContext(), commandBuffer.Handle);
+
+DrawHandle<Vertex> handle = new(vertexBuffer, commandBuffer.Handle);
+
 int width = 1280;
 
 int height = 720;
@@ -166,6 +168,8 @@ bool running = true;
 
 while(running) {
     SDL.WaitEvent(out SDL.Event e);
+
+    //SDL.PollEvent(out SDL.Event e);
 
     do {
         SDL.EventType type = (SDL.EventType)e.Type;
@@ -203,16 +207,6 @@ while(running) {
         continue;
     }
 
-    Rect textureRect = Rect.Create(-0.5f, -0.5f, 0.5f, 0.5f, ratio, angle * MathF.Tau / 360);
-
-    uint testIndex = testRect.AddVertices(vertexBuffer);
-
-    uint solidIndex = solidRect.AddVertices(vertexBuffer);
-
-    uint textureIndex = textureRect.AddVertices(vertexBuffer);
-
-    vertexBuffer.Flush();
-
     device.Handle.vkBeginCommandBuffer(commandBuffer.Handle, VkCommandBufferUsageFlags.OneTimeSubmit);
 
     commandBuffer.BeginRenderPass(renderPass.Handle, framebuffer.Handle, new(0, 0, (uint)width, (uint)height), new(0, 1, 0), VkSubpassContents.Inline);
@@ -221,49 +215,51 @@ while(running) {
 
     device.Handle.vkCmdSetScissor(commandBuffer.Handle, 0, new VkRect2D(0, 0, (uint)width, (uint)height));
 
+    //
+
     device.Handle.vkCmdSetPrimitiveTopologyEXT(commandBuffer.Handle, VkPrimitiveTopology.TriangleStrip);
+
+    //
 
     device.Handle.vkCmdBindVertexBuffer(commandBuffer.Handle, 0, vertexBuffer.LastBuffer.BufferHandle);
 
-    device.Handle.vkCmdBindPipeline(commandBuffer.Handle, VkPipelineBindPoint.Graphics, testPipeline.Handle);
+    //
 
-    device.Handle.vkCmdDraw(commandBuffer.Handle, 4, 1, testIndex, 0);
+    context.BindPipeline(testPipeline);
 
-    device.Handle.vkCmdBindPipeline(commandBuffer.Handle, VkPipelineBindPoint.Graphics, solidPipeline.Handle);
+    handle.Draw(testRect);
 
-    Vector4 solidColor = new(1, 0, 1, 1);
+    //
 
-    commandBuffer.PushConstants(solidLayout.Handle.Handle, VkShaderStageFlags.Fragment, 0, MemoryMarshal.AsBytes([solidColor]));
+    context.BindPipeline(solidPipeline);
 
-    device.Handle.vkCmdDraw(commandBuffer.Handle, 4, 1, solidIndex, 0);
+    context.Push(new Vector4(1, 0, 1, 1));
 
-    device.Handle.vkCmdBindPipeline(commandBuffer.Handle, VkPipelineBindPoint.Graphics, texturePipeline.Handle);
+    handle.Draw(solidRect);
 
-    long t1 = Stopwatch.GetTimestamp();
+    //
 
-    storageContext.ClearBindings();
+    context.BindPipeline(texturePipeline);
 
-    storageContext.AddBinding(new ThImageSamplerBinding(sampler.Handle, textureView.Handle));
+    context.AddBinding(new ThImageSamplerBinding(sampler.Handle, textureView.Handle));
 
-    VkDescriptorSet textureSet = storageContext.GetDescriptorSet(textureShader.SetLayouts[0]);
+    context.NextDescriptorSet();
 
-    long t2 = Stopwatch.GetTimestamp();
+    context.Bind();
 
-    Console.WriteLine($"Storage {(t2 - t1) * 1000000d / Stopwatch.Frequency}");
+    handle.Draw(Rect.Create(-0.5f, -0.5f, 0.5f, 0.5f, ratio, angle * MathF.Tau / 360));
 
-    device.Handle.vkCmdBindDescriptorSets(commandBuffer.Handle, VkPipelineBindPoint.Graphics, textureLayout.Handle.Handle, 0, textureSet);
+    //
 
-    device.Handle.vkCmdDraw(commandBuffer.Handle, 4, 1, textureIndex, 0);
+    context.AddBinding(new ThImageSamplerBinding(sampler.Handle, fontTexture.Handle));
 
-    storageContext.ClearBindings();
+    context.NextDescriptorSet();
 
-    storageContext.AddBinding(new ThImageSamplerBinding(sampler.Handle, fontTexture.Handle));
+    context.Bind();
 
-    textureSet = storageContext.GetDescriptorSet(textureShader.SetLayouts[0]);
+    handle.Draw(testRect);
 
-    device.Handle.vkCmdBindDescriptorSets(commandBuffer.Handle, VkPipelineBindPoint.Graphics, textureLayout.Handle.Handle, 0, textureSet);
-
-    device.Handle.vkCmdDraw(commandBuffer.Handle, 4, 1, testIndex, 0);
+    //
 
     device.Handle.vkCmdEndRenderPass(commandBuffer.Handle);
 
@@ -294,6 +290,8 @@ while(running) {
     });
 
     device.Handle.vkEndCommandBuffer(commandBuffer.Handle);
+
+    vertexBuffer.Flush();
 
     queue.Submit(fence.Handle, [presenter.Semaphore.Handle], [VkPipelineStageFlags.Transfer], [commandBuffer.Handle], [semaphore.Handle]);
 
