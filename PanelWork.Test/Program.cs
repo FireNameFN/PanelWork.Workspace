@@ -1,7 +1,10 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Reflection;
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
 using GreenPng;
 using PanelWork;
 using SDL3;
@@ -10,13 +13,21 @@ using Thermal.Core;
 using Thermal.Extensions;
 using Thermal.Fonts;
 using Thermal.Meshes;
+using Thermal.Models;
+using Thermal.Primitives;
 using Thermal.Shaders;
 using Thermal.ThVk;
 using Vortice.Vulkan;
 
-Console.WriteLine("Hello, World!");
+//BenchmarkRunner.Run<FontBenchmark>();
+
+//return;
+
+SDL.SetHint("SDL_VIDEO_DRIVER", "wayland,x11,cocoa,windows");
 
 SDL.Init(SDL.InitFlags.Video);
+
+Console.WriteLine(SDL.GetCurrentVideoDriver());
 
 SDL.VulkanLoadLibrary(null);
 
@@ -35,7 +46,8 @@ Window window = new(flags: SDL.WindowFlags.Resizable);
 VkSurfaceKHR surface = window.CreateSurface(instance.Handle.Instance);
 
 Presenter presenter = new(device, physicalDevice, queue, surface) {
-    Usage = VkImageUsageFlags.TransferDst
+    Usage = VkImageUsageFlags.TransferDst,
+    PresentMode = VkPresentModeKHR.Mailbox
 };
 
 ThCommandPool pool = device.CreateCommmandPool(queue.QueueFamily);
@@ -136,27 +148,29 @@ Font font = fontFactory.CreateFont(fontData);
 
 FontMap map = font.Render(command, physicalDevice, 24);
 
-ThImageView fontTexture = map.Image.Image.CreateImageView(VkFormat.R8Srgb, new(VkComponentSwizzle.R, VkComponentSwizzle.G, VkComponentSwizzle.B, VkComponentSwizzle.One));
+//ThImageView fontTexture = map.Image.Image.CreateImageView(VkFormat.R8Srgb, new(VkComponentSwizzle.R, VkComponentSwizzle.G, VkComponentSwizzle.B, VkComponentSwizzle.One));
+
+ThImageView fontTexture = map.Image.Image.CreateImageView(VkFormat.R8Srgb, new(VkComponentSwizzle.One, VkComponentSwizzle.One, VkComponentSwizzle.One, VkComponentSwizzle.R));
 
 ThImageView textureView = texture.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
 DescriptorStorage storage = new(device);
 
-DescriptorStorageContext storageContext = storage.CreateContext();
-
 VertexBuffer<Vertex> vertexBuffer = new(device, physicalDevice);
 
-float ratio = 1280f / 720;
+Rect testRect = Rect.Create(320, 60, 600 + 320, 600 + 60);
 
-Rect testRect = Rect.Create(-0.5f, -0.5f, 0.5f, 0.5f, ratio);
+Rect solidRect = Rect.Create(0, 0, 100, 100);
 
-Rect solidRect = Rect.Create(-1f, -1f, -0.9f, -0.9f);
+Viewport viewport = Viewport.Create(0, 0, 1280, 720);
 
 presenter.SetSize(1280, 720);
 
 DrawContext context = new(device, storage.CreateContext(), commandBuffer.Handle);
 
 DrawHandle<Vertex> handle = new(vertexBuffer, commandBuffer.Handle);
+
+Span<Vertex> vertices = stackalloc Vertex[200];
 
 int width = 1280;
 
@@ -185,13 +199,16 @@ while(running) {
 
             renderTarget.Dispose();
 
+            presenter.SetSize(width, height);
+
+            width = presenter.Width;
+            height = presenter.Height;
+
             renderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(width, height), 1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment);
 
             view = renderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
             framebuffer = renderPass.CreateFramebuffer([view.Handle], (uint)width, (uint)height);
-
-            presenter.SetSize(width, height);
         }
 
         if(type == SDL.EventType.Quit || type == SDL.EventType.WindowCloseRequested) {
@@ -199,13 +216,7 @@ while(running) {
         }
     } while(SDL.PollEvent(out e));
 
-    VkResult result = presenter.Acquire(ulong.MaxValue, out uint index, out ThImage image, out ThSemaphore semaphore);
-
-    if(result == VkResult.ErrorOutOfDateKHR) {
-        Console.WriteLine("Weh");
-
-        continue;
-    }
+    presenter.Acquire(ulong.MaxValue, out uint index, out ThImage image, out ThSemaphore semaphore);
 
     device.Handle.vkBeginCommandBuffer(commandBuffer.Handle, VkCommandBufferUsageFlags.OneTimeSubmit);
 
@@ -221,11 +232,9 @@ while(running) {
 
     //
 
-    device.Handle.vkCmdBindVertexBuffer(commandBuffer.Handle, 0, vertexBuffer.LastBuffer.BufferHandle);
-
-    //
-
     context.BindPipeline(testPipeline);
+
+    context.Push(viewport);
 
     handle.Draw(testRect);
 
@@ -233,7 +242,10 @@ while(running) {
 
     context.BindPipeline(solidPipeline);
 
-    context.Push(new Vector4(1, 0, 1, 1));
+    context.Push(new SolidPush() {
+        Viewport = viewport,
+        Color = new Vector4(1, 0, 1, 1)
+    });
 
     handle.Draw(solidRect);
 
@@ -247,7 +259,7 @@ while(running) {
 
     context.Bind();
 
-    handle.Draw(Rect.Create(-0.5f, -0.5f, 0.5f, 0.5f, ratio, angle * MathF.Tau / 360));
+    handle.Draw(Rect.Create(320, 60, 600 + 320, 600 + 60, angle * MathF.Tau / 360));
 
     //
 
@@ -257,7 +269,25 @@ while(running) {
 
     context.Bind();
 
-    handle.Draw(testRect);
+    //handle.Draw(testRect);
+
+    //
+
+    int length = TextModel.CreateModel(map, "London is the capital of Great Britain!", vertices);
+
+    context.BindPipeline(texturePipeline);
+
+    context.Push(new Vector4(viewport.X, viewport.Y, 0, 0));
+
+    context.AddBinding(new ThImageSamplerBinding(sampler.Handle, fontTexture.Handle));
+
+    context.NextDescriptorSet();
+
+    context.Bind();
+
+    device.Handle.vkCmdSetPrimitiveTopologyEXT(commandBuffer.Handle, VkPrimitiveTopology.TriangleList);
+
+    handle.Draw(vertices[..length]);
 
     //
 
@@ -307,9 +337,69 @@ while(running) {
 
     vertexBuffer.Clear();
 
-    angle += 0.2f;
+    angle += 0.5f;
 
     Console.WriteLine("Frame");
 }
 
 Console.WriteLine("End");
+
+struct SolidPush {
+    public Viewport Viewport;
+
+    public Vector4 Color;
+}
+
+[MemoryDiagnoser(false)]
+public class FontBenchmark {
+    FontFactory factory;
+
+    ThDevice device;
+
+    byte[] fontData;
+
+    Font font;
+
+    Command command;
+
+    ThPhysicalDevice physicalDevice;
+
+    FontMap map;
+
+    Vertex[] vertices = new Vertex[200];
+
+    [GlobalSetup]
+    public void Setup() {
+        Stream fontStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Test.Resources.inter.ttf");
+
+        fontData = new byte[fontStream.Length];
+
+        fontStream.ReadExactly(fontData);
+
+        factory = new();
+
+        font = factory.CreateFont(fontData);
+
+        factory.CreateFont(fontData);
+
+        ThInstance instance = ThInstance.Create(VkVersion.Version_1_2, [], []);
+
+        instance.TryCreateDevicePreferDiscrete((_, _, _, _) => true, [], new(), out physicalDevice, out device, out ThQueue queue);
+
+        command = new(device, queue);
+
+        map = font.Render(command, physicalDevice, 24);
+    }
+
+    [Benchmark]
+    public FontMap RenderFont() {
+        return font.Render(command, physicalDevice, 24);
+    }
+
+    [Benchmark]
+    public Vertex CreateModel() {
+        int length = TextModel.CreateModel(map, "London is the capital of Great Britain!", vertices);
+
+        return vertices[length - 1];
+    }
+}
