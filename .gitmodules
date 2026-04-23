@@ -1,9 +1,12 @@
+[submodule "PanelWork"]
+	path = PanelWork
+	url = https://github.com/FireNameFN/PanelWork.git
 [submodule "Thermal"]
 	path = Thermal
 	url = https://github.com/FireNameFN/Thermal.git
 [submodule "GreenPng"]
 	path = GreenPng
 	url = https://github.com/FireNameFN/GreenPng.git
-[submodule "PanelWork"]
-	path = PanelWork
-	url = https://github.com/FireNameFN/PanelWork.git
+[submodule "GreenBuf"]
+	path = GreenBuf
+	url = https://github.com/FireNameFN/GreenBuf.git

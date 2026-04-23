@@ -1,8 +1,6 @@
 <Solution>
-  <Folder Name="/GreenPng/">
-    <Project Path="GreenPng/GreenBuf/GreenBuf.csproj" />
-    <Project Path="GreenPng/GreenPng/GreenPng.csproj" />
-  </Folder>
+  <Project Path="GreenBuf/GreenBuf.csproj" />
+  <Project Path="GreenPng/GreenPng.csproj" />
   <Project Path="PanelWork.Test/PanelWork.Test.csproj" />
   <Project Path="PanelWork/PanelWork.csproj" />
   <Project Path="Thermal/Thermal.csproj" />
