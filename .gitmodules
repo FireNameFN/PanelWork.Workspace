@@ -7,4 +7,3 @@
 [submodule "PanelWork"]
 	path = PanelWork
 	url = https://github.com/FireNameFN/PanelWork
-	branch = Component
