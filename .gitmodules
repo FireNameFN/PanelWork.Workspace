@@ -4,3 +4,7 @@
 [submodule "GreenPng"]
 	path = GreenPng
 	url = https://github.com/FireNameFN/GreenPng
+[submodule "PanelWork"]
+	path = PanelWork
+	url = https://github.com/FireNameFN/PanelWork
+	branch = Component
