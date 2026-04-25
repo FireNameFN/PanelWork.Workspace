@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 using GreenPng;
@@ -22,6 +23,8 @@ using Vortice.Vulkan;
 //BenchmarkRunner.Run<FontBenchmark>();
 
 //return;
+
+//SDL.SetHint("SDL_VIDEO_DRIVER", "x11");
 
 SDL.SetHint("SDL_VIDEO_DRIVER", "wayland,x11,cocoa,windows");
 
@@ -192,6 +195,8 @@ DescriptorStorage storage = new(device);
 
 VertexBuffer<Vertex> vertexBuffer = new(device, physicalDevice);
 
+VertexBuffer<Matrix> instanceBuffer = new(device, physicalDevice);
+
 Rect testRect = Rect.Create(320, 60, 600 + 320, 600 + 60);
 
 Rect solidRect = Rect.Create(0, 0, 100, 100, new Vector4(1, 0, 1, 1));
@@ -206,7 +211,7 @@ presenter.SetSize(1280, 720);
 
 DrawContext context = new(device, storage.CreateContext(), commandBuffer.Handle);
 
-DrawHandle<Vertex> handle = new(vertexBuffer, commandBuffer.Handle);
+DrawHandle<Vertex, Matrix> handle = new(vertexBuffer, instanceBuffer, commandBuffer.Handle);
 
 int width = 1280;
 
@@ -235,6 +240,10 @@ while(running) {
 
             framebuffer.Dispose();
 
+            colorView.Dispose();
+
+            colorRenderTarget.Dispose();
+
             resolveView.Dispose();
 
             resolveRenderTarget.Dispose();
@@ -244,15 +253,15 @@ while(running) {
             width = presenter.Width;
             height = presenter.Height;
 
-            colorRenderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkSampleCountFlags.Count8, VkImageUsageFlags.ColorAttachment | VkImageUsageFlags.TransientAttachment);
+            colorRenderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(width, height), 1, VkSampleCountFlags.Count8, VkImageUsageFlags.ColorAttachment | VkImageUsageFlags.TransientAttachment);
 
             colorView = colorRenderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
-            resolveRenderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkSampleCountFlags.Count1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment);
+            resolveRenderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(width, height), 1, VkSampleCountFlags.Count1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment);
 
             resolveView = resolveRenderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
-            framebuffer = renderPass.CreateFramebuffer([resolveView.Handle], (uint)width, (uint)height);
+            framebuffer = renderPass.CreateFramebuffer([colorView.Handle, resolveView.Handle], (uint)width, (uint)height);
         }
 
         if(type == SDL.EventType.Quit || type == SDL.EventType.WindowCloseRequested) {
@@ -274,7 +283,9 @@ while(running) {
 
     context.BindPipeline(testPipeline);
 
-    context.Push(viewport);
+    Matrix3x2 mat = Matrix.CreateViewport(1280, 720);
+
+    handle.WithInstance([Matrix.CreateFrom(mat)]);
 
     handle.AddDraw(testRect);
 
@@ -330,13 +341,15 @@ while(running) {
 
     context.BindPipeline(texturePipeline);
 
-    context.Push(new Vector4(viewport.X, viewport.Y, 0, 0));
-
     context.AddBinding(new ThImageSamplerBinding(sampler.Handle, fontTexture.Handle));
 
     context.NextDescriptorSet();
 
     context.Bind();
+
+    mat *= Matrix.CreateTranslation(1, 1);
+
+    handle.WithInstance([Matrix.CreateFrom(mat)]);
 
     TextModel.CreateModel(map, "London is the capital of Great Britain!", handle);
 
@@ -374,7 +387,7 @@ while(running) {
 
     device.Handle.vkEndCommandBuffer(commandBuffer.Handle);
 
-    vertexBuffer.Flush();
+    handle.BufferFlush();
 
     queue.Submit(fence.Handle, [presenter.Semaphore.Handle], [VkPipelineStageFlags.Transfer], [commandBuffer.Handle], [semaphore.Handle]);
 
@@ -388,7 +401,7 @@ while(running) {
 
     storage.Clear();
 
-    vertexBuffer.Clear();
+    handle.BufferClear();
 
     angle += 0.5f;
 
@@ -425,7 +438,7 @@ public class FontBenchmark {
 
     Vertex[] vertices = new Vertex[200];
 
-    DrawHandle<Vertex> handle = new(null, default, 200);
+    DrawHandle<Vertex, Matrix> handle = new(null, null, default, 200);
 
     [GlobalSetup]
     public void Setup() {
