@@ -36,10 +36,12 @@ string[] extensions = SDL.VulkanGetInstanceExtensions(out _);
 ThInstance instance = ThInstance.Create(VkVersion.Version_1_2, ["VK_LAYER_KHRONOS_validation"], extensions);
 
 ThDeviceFeatures features = new() {
-    ExtendedDynamicState = true
+    Features = new() {
+        sampleRateShading = true
+    }
 };
 
-instance.TryCreateDevicePreferDiscrete((instance, physicalDevice, queueFamily, flags) => SDL.VulkanGetPresentationSupport(instance, physicalDevice, queueFamily), ["VK_KHR_swapchain", "VK_EXT_extended_dynamic_state"], features, out ThPhysicalDevice physicalDevice, out ThDevice device, out ThQueue queue);
+instance.TryCreateDevicePreferDiscrete((instance, physicalDevice, queueFamily, flags) => SDL.VulkanGetPresentationSupport(instance, physicalDevice, queueFamily), ["VK_KHR_swapchain"], features, out ThPhysicalDevice physicalDevice, out ThDevice device, out ThQueue queue);
 
 Window window = new(flags: SDL.WindowFlags.Resizable);
 
@@ -58,22 +60,48 @@ Command command = new(device, queue);
 
 ThFence fence = device.CreateFence();
 
-ThDeviceImage renderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment);
+ThDeviceImage colorRenderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkSampleCountFlags.Count8, VkImageUsageFlags.ColorAttachment | VkImageUsageFlags.TransientAttachment);
 
-ThImageView view = renderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
+ThImageView colorView = colorRenderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
-ThRenderPass renderPass = device.CreateRenderPass(new() {
+ThDeviceImage resolveRenderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkSampleCountFlags.Count1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment);
+
+ThImageView resolveView = resolveRenderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
+
+VkAttachmentDescription colorAttachment = new() {
+    format = VkFormat.B8G8R8A8Srgb,
+    samples = VkSampleCountFlags.Count8,
+    loadOp = VkAttachmentLoadOp.Clear,
+    storeOp = VkAttachmentStoreOp.DontCare,
+    stencilLoadOp = VkAttachmentLoadOp.DontCare,
+    stencilStoreOp = VkAttachmentStoreOp.DontCare,
+    initialLayout = VkImageLayout.Undefined,
+    finalLayout = VkImageLayout.ColorAttachmentOptimal
+};
+
+VkAttachmentDescription resolveAttachment = new() {
     format = VkFormat.B8G8R8A8Srgb,
     samples = VkSampleCountFlags.Count1,
-    loadOp = VkAttachmentLoadOp.Clear,
+    loadOp = VkAttachmentLoadOp.DontCare,
     storeOp = VkAttachmentStoreOp.Store,
     stencilLoadOp = VkAttachmentLoadOp.DontCare,
     stencilStoreOp = VkAttachmentStoreOp.DontCare,
     initialLayout = VkImageLayout.Undefined,
     finalLayout = VkImageLayout.TransferSrcOptimal
-});
+};
 
-ThFramebuffer framebuffer = renderPass.CreateFramebuffer([view.Handle], 1280, 720);
+ThRenderPass.SubpassDescriptionSpan subpassDescriptionSpan = new() {
+    PipelineBindPoints = [VkPipelineBindPoint.Graphics],
+    Input = new([0], []),
+    Color = new([1], [new VkAttachmentReference(0, VkImageLayout.ColorAttachmentOptimal)]),
+    Resolve = new([1], [new VkAttachmentReference(1, VkImageLayout.ColorAttachmentOptimal)]),
+    Depth = new([0], []),
+    Preserve = new([0], [])
+};
+
+ThRenderPass renderPass = device.CreateRenderPass([colorAttachment, resolveAttachment], subpassDescriptionSpan);
+
+ThFramebuffer framebuffer = renderPass.CreateFramebuffer([colorView.Handle, resolveView.Handle], 1280, 720);
 
 ShaderBuilder shaderBuilder = new(device);
 
@@ -85,17 +113,23 @@ ShaderLayout solidShader = shaderBuilder.BuildSolid();
 
 ShaderLayout textureShader = shaderBuilder.BuildTexture();
 
+ShaderLayout roundedShader = shaderBuilder.BuildRounded();
+
 PipelineLayout testLayout = PipelineLayout.Create(device, vertexShader, testShader);
 
 PipelineLayout solidLayout = PipelineLayout.Create(device, vertexShader, solidShader);
 
 PipelineLayout textureLayout = PipelineLayout.Create(device, vertexShader, textureShader);
 
-Pipeline testPipeline = testLayout.CreatePipeline(renderPass.Handle);
+PipelineLayout roundedLayout = PipelineLayout.Create(device, vertexShader, roundedShader);
 
-Pipeline solidPipeline = solidLayout.CreatePipeline(renderPass.Handle);
+Pipeline testPipeline = testLayout.CreatePipeline(renderPass.Handle, VkSampleCountFlags.Count8, -1);
 
-Pipeline texturePipeline = textureLayout.CreatePipeline(renderPass.Handle);
+Pipeline solidPipeline = solidLayout.CreatePipeline(renderPass.Handle, VkSampleCountFlags.Count8, -1);
+
+Pipeline texturePipeline = textureLayout.CreatePipeline(renderPass.Handle, VkSampleCountFlags.Count8, 1);
+
+Pipeline roundedPipeline = roundedLayout.CreatePipeline(renderPass.Handle, VkSampleCountFlags.Count8, 1);
 
 ThSampler sampler = device.CreateSampler(VkFilter.Nearest, VkSamplerAddressMode.Repeat);
 
@@ -160,7 +194,11 @@ VertexBuffer<Vertex> vertexBuffer = new(device, physicalDevice);
 
 Rect testRect = Rect.Create(320, 60, 600 + 320, 600 + 60);
 
-Rect solidRect = Rect.Create(0, 0, 100, 100);
+Rect solidRect = Rect.Create(0, 0, 100, 100, new Vector4(1, 0, 1, 1));
+
+RoundedRect roundedRect = RoundedRect.Create(270, 130, 470, 230, 25, new Vector4(0, 0, 1, 1));
+
+RoundedRect roundedRect2 = RoundedRect.Create(500, 130, 700, 280, 20, new Vector4(0.2f, 0.2f, 1, 1));
 
 Viewport viewport = Viewport.Create(0, 0, 1280, 720);
 
@@ -170,8 +208,6 @@ DrawContext context = new(device, storage.CreateContext(), commandBuffer.Handle)
 
 DrawHandle<Vertex> handle = new(vertexBuffer, commandBuffer.Handle);
 
-Span<Vertex> vertices = stackalloc Vertex[200];
-
 int width = 1280;
 
 int height = 720;
@@ -179,6 +215,10 @@ int height = 720;
 float angle = 0;
 
 bool running = true;
+
+long time = Stopwatch.GetTimestamp();
+
+int frames = 0;
 
 while(running) {
     SDL.WaitEvent(out SDL.Event e);
@@ -195,20 +235,24 @@ while(running) {
 
             framebuffer.Dispose();
 
-            view.Dispose();
+            resolveView.Dispose();
 
-            renderTarget.Dispose();
+            resolveRenderTarget.Dispose();
 
             presenter.SetSize(width, height);
 
             width = presenter.Width;
             height = presenter.Height;
 
-            renderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(width, height), 1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment);
+            colorRenderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkSampleCountFlags.Count8, VkImageUsageFlags.ColorAttachment | VkImageUsageFlags.TransientAttachment);
 
-            view = renderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
+            colorView = colorRenderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
-            framebuffer = renderPass.CreateFramebuffer([view.Handle], (uint)width, (uint)height);
+            resolveRenderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkSampleCountFlags.Count1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment);
+
+            resolveView = resolveRenderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
+
+            framebuffer = renderPass.CreateFramebuffer([resolveView.Handle], (uint)width, (uint)height);
         }
 
         if(type == SDL.EventType.Quit || type == SDL.EventType.WindowCloseRequested) {
@@ -228,26 +272,27 @@ while(running) {
 
     //
 
-    device.Handle.vkCmdSetPrimitiveTopologyEXT(commandBuffer.Handle, VkPrimitiveTopology.TriangleStrip);
-
-    //
-
     context.BindPipeline(testPipeline);
 
     context.Push(viewport);
 
-    handle.Draw(testRect);
+    handle.AddDraw(testRect);
+
+    handle.AddDraw([
+        new(0, 0, 0, 1),
+        new(1280, 0, 1, 1),
+        new(640, 720, 0.9f, 0),
+    ]);
+
+    handle.Flush();
 
     //
 
     context.BindPipeline(solidPipeline);
 
-    context.Push(new SolidPush() {
-        Viewport = viewport,
-        Color = new Vector4(1, 0, 1, 1)
-    });
+    handle.AddDraw(solidRect);
 
-    handle.Draw(solidRect);
+    handle.Flush();
 
     //
 
@@ -259,7 +304,9 @@ while(running) {
 
     context.Bind();
 
-    handle.Draw(Rect.Create(320, 60, 600 + 320, 600 + 60, angle * MathF.Tau / 360));
+    handle.AddDraw(Rect.Create(320, 60, 600 + 320, 600 + 60, angle * MathF.Tau / 360));
+
+    handle.Flush();
 
     //
 
@@ -271,9 +318,15 @@ while(running) {
 
     //handle.Draw(testRect);
 
-    //
+    context.BindPipeline(roundedPipeline);
 
-    int length = TextModel.CreateModel(map, "London is the capital of Great Britain!", vertices);
+    handle.AddDraw(roundedRect);
+
+    handle.AddDraw(roundedRect2);
+
+    handle.Flush();
+
+    //
 
     context.BindPipeline(texturePipeline);
 
@@ -285,9 +338,9 @@ while(running) {
 
     context.Bind();
 
-    device.Handle.vkCmdSetPrimitiveTopologyEXT(commandBuffer.Handle, VkPrimitiveTopology.TriangleList);
+    TextModel.CreateModel(map, "London is the capital of Great Britain!", handle);
 
-    handle.Draw(vertices[..length]);
+    handle.Flush();
 
     //
 
@@ -308,7 +361,7 @@ while(running) {
         extent = new(width, height, 1)
     };
 
-    commandBuffer.CopyImage(renderTarget.Image.Handle, VkImageLayout.TransferSrcOptimal, image.Handle, VkImageLayout.TransferDstOptimal, copy);
+    commandBuffer.CopyImage(resolveRenderTarget.Image.Handle, VkImageLayout.TransferSrcOptimal, image.Handle, VkImageLayout.TransferDstOptimal, copy);
 
     commandBuffer.ImageBarrier(image.Handle, new() {
         SrcAccess = VkAccessFlags.TransferWrite,
@@ -339,16 +392,20 @@ while(running) {
 
     angle += 0.5f;
 
-    Console.WriteLine("Frame");
+    if(frames++ >= 1000) {
+        long t2 = Stopwatch.GetTimestamp();
+
+        Console.WriteLine((t2 - time) * 1000 / Stopwatch.Frequency);
+
+        time = t2;
+
+        frames = 0;
+    }
+
+    //Console.WriteLine("Frame");
 }
 
 Console.WriteLine("End");
-
-struct SolidPush {
-    public Viewport Viewport;
-
-    public Vector4 Color;
-}
 
 [MemoryDiagnoser(false)]
 public class FontBenchmark {
@@ -367,6 +424,8 @@ public class FontBenchmark {
     FontMap map;
 
     Vertex[] vertices = new Vertex[200];
+
+    DrawHandle<Vertex> handle = new(null, default, 200);
 
     [GlobalSetup]
     public void Setup() {
@@ -397,9 +456,7 @@ public class FontBenchmark {
     }
 
     [Benchmark]
-    public Vertex CreateModel() {
-        int length = TextModel.CreateModel(map, "London is the capital of Great Britain!", vertices);
-
-        return vertices[length - 1];
+    public void CreateModel() {
+        TextModel.CreateModel(map, "London is the capital of Great Britain!", handle);
     }
 }
