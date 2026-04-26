@@ -3,9 +3,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Running;
 using GreenPng;
 using PanelWork;
 using SDL3;
@@ -19,10 +16,6 @@ using Thermal.Primitives;
 using Thermal.Shaders;
 using Thermal.ThVk;
 using Vortice.Vulkan;
-
-//BenchmarkRunner.Run<FontBenchmark>();
-
-//return;
 
 //SDL.SetHint("SDL_VIDEO_DRIVER", "x11");
 
@@ -136,7 +129,7 @@ Pipeline roundedPipeline = roundedLayout.CreatePipeline(renderPass.Handle, VkSam
 
 ThSampler sampler = device.CreateSampler(VkFilter.Nearest, VkSamplerAddressMode.Repeat);
 
-Stream trayStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Test.Resources.tray.png");
+Stream trayStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Playground.Resources.tray.png");
 
 Span<byte> traySpan = stackalloc byte[(int)trayStream.Length];
 
@@ -157,7 +150,7 @@ SDL.SetTrayEntryCallback(entry, (entry, user) => {
 Atlas atlas = new(512, 512);
 
 foreach(string name in Assembly.GetExecutingAssembly().GetManifestResourceNames()) {
-    if(!name.StartsWith("PanelWork.Test.Resources.textures."))
+    if(!name.StartsWith("PanelWork.Playground.Resources.textures."))
         continue;
 
     using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name);
@@ -173,7 +166,7 @@ foreach(string name in Assembly.GetExecutingAssembly().GetManifestResourceNames(
 
 ThDeviceImage texture = atlas.CreateTexture(command, physicalDevice);
 
-Stream fontStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Test.Resources.inter.ttf");
+Stream fontStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Playground.Resources.inter.ttf");
 
 byte[] fontData = new byte[fontStream.Length];
 
@@ -419,57 +412,3 @@ while(running) {
 }
 
 Console.WriteLine("End");
-
-[MemoryDiagnoser(false)]
-public class FontBenchmark {
-    FontFactory factory;
-
-    ThDevice device;
-
-    byte[] fontData;
-
-    Font font;
-
-    Command command;
-
-    ThPhysicalDevice physicalDevice;
-
-    FontMap map;
-
-    Vertex[] vertices = new Vertex[200];
-
-    DrawHandle<Vertex, Matrix> handle = new(null, null, default, 200);
-
-    [GlobalSetup]
-    public void Setup() {
-        Stream fontStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Test.Resources.inter.ttf");
-
-        fontData = new byte[fontStream.Length];
-
-        fontStream.ReadExactly(fontData);
-
-        factory = new();
-
-        font = factory.CreateFont(fontData);
-
-        factory.CreateFont(fontData);
-
-        ThInstance instance = ThInstance.Create(VkVersion.Version_1_2, [], []);
-
-        instance.TryCreateDevicePreferDiscrete((_, _, _, _) => true, [], new(), out physicalDevice, out device, out ThQueue queue);
-
-        command = new(device, queue);
-
-        map = font.Render(command, physicalDevice, 24);
-    }
-
-    [Benchmark]
-    public FontMap RenderFont() {
-        return font.Render(command, physicalDevice, 24);
-    }
-
-    [Benchmark]
-    public void CreateModel() {
-        TextModel.CreateModel(map, "London is the capital of Great Britain!", handle);
-    }
-}

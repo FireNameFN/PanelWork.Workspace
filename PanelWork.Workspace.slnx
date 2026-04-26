@@ -1,7 +1,8 @@
 <Solution>
   <Project Path="GreenBuf/GreenBuf.csproj" />
   <Project Path="GreenPng/GreenPng.csproj" />
-  <Project Path="PanelWork.Test/PanelWork.Test.csproj" />
+  <Project Path="PanelWork.Benchmarks/PanelWork.Benchmarks.csproj" />
+  <Project Path="PanelWork.Playground/PanelWork.Playground.csproj" />
   <Project Path="PanelWork/PanelWork.csproj" />
   <Project Path="Thermal/Thermal.csproj" />
 </Solution>
