@@ -135,7 +135,7 @@ Span<byte> traySpan = stackalloc byte[(int)trayStream.Length];
 
 trayStream.ReadExactly(traySpan);
 
-Icon icon = Icon.CreateFromPng(traySpan);
+Icon.TryCreateFromPng(traySpan, out Icon icon);
 
 nint tray = SDL.CreateTray(icon.Handle, "PanelWork");
 
