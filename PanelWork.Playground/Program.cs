@@ -37,7 +37,7 @@ ThDeviceFeatures features = new() {
     }
 };
 
-instance.TryCreateDevicePreferDiscrete((instance, physicalDevice, queueFamily, flags) => SDL.VulkanGetPresentationSupport(instance, physicalDevice, queueFamily), ["VK_KHR_swapchain"], features, out ThPhysicalDevice physicalDevice, out ThDevice device, out ThQueue queue);
+instance.TryCreateDevicePreferDiscrete((physicalDevice, queueFamily, flags) => SDL.VulkanGetPresentationSupport(physicalDevice.Instance.Instance, physicalDevice.Handle, queueFamily), ["VK_KHR_swapchain"], features, out ThPhysicalDevice physicalDevice, out ThDevice device, out ThQueue queue);
 
 Window window = new(flags: SDL.WindowFlags.Resizable);
 

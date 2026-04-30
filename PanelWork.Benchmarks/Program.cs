@@ -48,7 +48,7 @@ public class FontBenchmark {
 
         ThInstance instance = ThInstance.Create(VkVersion.Version_1_2, [], []);
 
-        instance.TryCreateDevicePreferDiscrete((_, _, _, _) => true, [], new(), out physicalDevice, out device, out ThQueue queue);
+        instance.TryCreateDevicePreferDiscrete((_, _, _) => true, [], new(), out physicalDevice, out device, out ThQueue queue);
 
         command = new(device, queue);
 
