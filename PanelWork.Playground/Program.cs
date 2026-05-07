@@ -44,7 +44,7 @@ Window window = new(flags: SDL.WindowFlags.Resizable);
 VkSurfaceKHR surface = window.CreateSurface(instance.Handle.Instance);
 
 Presenter presenter = new(device, physicalDevice, queue, surface) {
-    Usage = VkImageUsageFlags.TransferDst,
+    Usage = VkImageUsageFlags.ColorAttachment,
     PresentMode = VkPresentModeKHR.Mailbox
 };
 
@@ -55,14 +55,6 @@ ThCommandBuffer commandBuffer = pool.AllocateCommandBuffer(VkCommandBufferLevel.
 Command command = new(device, queue);
 
 ThFence fence = device.CreateFence();
-
-ThDeviceImage colorRenderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkSampleCountFlags.Count8, VkImageUsageFlags.ColorAttachment | VkImageUsageFlags.TransientAttachment);
-
-ThImageView colorView = colorRenderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
-
-ThDeviceImage resolveRenderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(1280, 720), 1, VkSampleCountFlags.Count1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment);
-
-ThImageView resolveView = resolveRenderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
 VkAttachmentDescription colorAttachment = new() {
     format = VkFormat.B8G8R8A8Srgb,
@@ -83,7 +75,7 @@ VkAttachmentDescription resolveAttachment = new() {
     stencilLoadOp = VkAttachmentLoadOp.DontCare,
     stencilStoreOp = VkAttachmentStoreOp.DontCare,
     initialLayout = VkImageLayout.Undefined,
-    finalLayout = VkImageLayout.TransferSrcOptimal
+    finalLayout = VkImageLayout.PresentSrcKHR
 };
 
 ThRenderPass.SubpassDescriptionSpan subpassDescriptionSpan = new() {
@@ -96,8 +88,6 @@ ThRenderPass.SubpassDescriptionSpan subpassDescriptionSpan = new() {
 };
 
 ThRenderPass renderPass = device.CreateRenderPass([colorAttachment, resolveAttachment], subpassDescriptionSpan);
-
-ThFramebuffer framebuffer = renderPass.CreateFramebuffer([colorView.Handle, resolveView.Handle], 1280, 720);
 
 ShaderBuilder shaderBuilder = new(device);
 
@@ -200,15 +190,21 @@ RoundedRect roundedRect2 = RoundedRect.Create(500, 130, 700, 280, 20, new Vector
 
 Viewport viewport = Viewport.Create(0, 0, 1280, 720);
 
-presenter.SetSize(1280, 720);
-
 DrawContext context = new(device, storage.CreateContext(), commandBuffer.Handle);
 
 DrawHandle<Vertex, Matrix> handle = new(vertexBuffer, instanceBuffer, commandBuffer.Handle);
 
-int width = 1280;
+int width = 0;
 
-int height = 720;
+int height = 0;
+
+ThFramebuffer[] framebuffers = null;
+
+ThImageView[] imageViews = null;
+
+ThDeviceImage colorRenderTarget = default;
+
+ThImageView colorView = default;
 
 float angle = 0;
 
@@ -216,30 +212,38 @@ bool running = true;
 
 long time = Stopwatch.GetTimestamp();
 
+bool resize = true;
+
 int frames = 0;
 
 while(running) {
-    SDL.WaitEvent(out SDL.Event e);
+    //SDL.WaitEvent(out SDL.Event e);
 
-    //SDL.PollEvent(out SDL.Event e);
+    SDL.PollEvent(out SDL.Event e);
 
     do {
         SDL.EventType type = (SDL.EventType)e.Type;
 
-        if(type == SDL.EventType.WindowResized) {
+        //Console.WriteLine(type);
+
+        if(type == SDL.EventType.WindowPixelSizeChanged || resize) {
+            resize = false;
+
             Console.WriteLine("Resize");
 
             SDL.GetWindowSizeInPixels(window.Handle, out width, out height);
 
-            framebuffer.Dispose();
+            if(colorRenderTarget.ImageHandle.IsNotNull) {
+                foreach(ThFramebuffer framebuffer in framebuffers)
+                    framebuffer.Dispose();
 
-            colorView.Dispose();
+                foreach(ThImageView imageView in imageViews)
+                    imageView.Dispose();
 
-            colorRenderTarget.Dispose();
+                colorView.Dispose();
 
-            resolveView.Dispose();
-
-            resolveRenderTarget.Dispose();
+                colorRenderTarget.Dispose();
+            }
 
             presenter.SetSize(width, height);
 
@@ -250,11 +254,15 @@ while(running) {
 
             colorView = colorRenderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
-            resolveRenderTarget = device.AllocateImage(physicalDevice, VkFormat.B8G8R8A8Srgb, new(width, height), 1, VkSampleCountFlags.Count1, VkImageUsageFlags.TransferSrc | VkImageUsageFlags.ColorAttachment);
+            imageViews = new ThImageView[presenter.Images.Length];
 
-            resolveView = resolveRenderTarget.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
+            for(int i = 0; i < presenter.Images.Length; i++)
+                imageViews[i] = presenter.Images[i].CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
 
-            framebuffer = renderPass.CreateFramebuffer([colorView.Handle, resolveView.Handle], (uint)width, (uint)height);
+            framebuffers = new ThFramebuffer[presenter.Images.Length];
+
+            for(int i = 0; i < presenter.Images.Length; i++)
+                framebuffers[i] = renderPass.CreateFramebuffer([colorView.Handle, imageViews[i].Handle], width, height);
         }
 
         if(type == SDL.EventType.Quit || type == SDL.EventType.WindowCloseRequested) {
@@ -262,11 +270,19 @@ while(running) {
         }
     } while(SDL.PollEvent(out e));
 
-    presenter.Acquire(ulong.MaxValue, out uint index, out ThImage image, out ThSemaphore semaphore);
+    VkResult result = presenter.Acquire(ulong.MaxValue, out uint index, out ThImage image, out ThSemaphore semaphore);
+
+    //Console.WriteLine(result);
+
+    if(result != VkResult.Success) {
+        resize = true;
+
+        continue;
+    }
 
     device.Handle.vkBeginCommandBuffer(commandBuffer.Handle, VkCommandBufferUsageFlags.OneTimeSubmit);
 
-    commandBuffer.BeginRenderPass(renderPass.Handle, framebuffer.Handle, new(0, 0, (uint)width, (uint)height), new(0, 1, 0), VkSubpassContents.Inline);
+    commandBuffer.BeginRenderPass(renderPass.Handle, framebuffers[index].Handle, new(0, 0, (uint)width, (uint)height), new(0, 1, 0), VkSubpassContents.Inline);
 
     device.Handle.vkCmdSetViewport(commandBuffer.Handle, 0, new VkViewport(width, height));
 
@@ -352,39 +368,15 @@ while(running) {
 
     device.Handle.vkCmdEndRenderPass(commandBuffer.Handle);
 
-    commandBuffer.ImageBarrier(image.Handle, new() {
-        SrcAccess = VkAccessFlags.None,
-        DstAccess = VkAccessFlags.TransferWrite,
-        OldLayout = VkImageLayout.Undefined,
-        NewLayout = VkImageLayout.TransferDstOptimal,
-        SrcStage = VkPipelineStageFlags.ColorAttachmentOutput,
-        DstStage = VkPipelineStageFlags.Transfer
-    });
-
-    VkImageCopy copy = new() {
-        srcSubresource = new(VkImageAspectFlags.Color, 0, 0, 1),
-        dstSubresource = new(VkImageAspectFlags.Color, 0, 0, 1),
-        extent = new(width, height, 1)
-    };
-
-    commandBuffer.CopyImage(resolveRenderTarget.Image.Handle, VkImageLayout.TransferSrcOptimal, image.Handle, VkImageLayout.TransferDstOptimal, copy);
-
-    commandBuffer.ImageBarrier(image.Handle, new() {
-        SrcAccess = VkAccessFlags.TransferWrite,
-        DstAccess = VkAccessFlags.None,
-        OldLayout = VkImageLayout.TransferDstOptimal,
-        NewLayout = VkImageLayout.PresentSrcKHR,
-        SrcStage = VkPipelineStageFlags.Transfer,
-        DstStage = VkPipelineStageFlags.BottomOfPipe
-    });
-
     device.Handle.vkEndCommandBuffer(commandBuffer.Handle);
 
     handle.BufferFlush();
 
-    queue.Submit(fence.Handle, [presenter.Semaphore.Handle], [VkPipelineStageFlags.Transfer], [commandBuffer.Handle], [semaphore.Handle]);
+    queue.Submit(fence.Handle, [presenter.Semaphore.Handle], [VkPipelineStageFlags.ColorAttachmentOutput], [commandBuffer.Handle], [semaphore.Handle]);
 
-    presenter.Present(index);
+    result = presenter.Present(index);
+
+    //Console.WriteLine(result);
 
     fence.Wait();
 
