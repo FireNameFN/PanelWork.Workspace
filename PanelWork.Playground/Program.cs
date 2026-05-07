@@ -48,7 +48,7 @@ Presenter presenter = new(device, physicalDevice, queue, surface) {
     PresentMode = VkPresentModeKHR.Mailbox
 };
 
-ThCommandPool pool = device.CreateCommmandPool(queue.QueueFamily);
+ThCommandPool pool = device.CreateCommmandPool(queue.QueueFamily, VkCommandPoolCreateFlags.Transient);
 
 ThCommandBuffer commandBuffer = pool.AllocateCommandBuffer(VkCommandBufferLevel.Primary);
 
@@ -168,8 +168,6 @@ Font font = fontFactory.CreateFont(fontData);
 
 FontMap map = font.Render(command, physicalDevice, 24);
 
-//ThImageView fontTexture = map.Image.Image.CreateImageView(VkFormat.R8Srgb, new(VkComponentSwizzle.R, VkComponentSwizzle.G, VkComponentSwizzle.B, VkComponentSwizzle.One));
-
 ThImageView fontTexture = map.Image.Image.CreateImageView(VkFormat.R8Srgb, new(VkComponentSwizzle.One, VkComponentSwizzle.One, VkComponentSwizzle.One, VkComponentSwizzle.R));
 
 ThImageView textureView = texture.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, VkComponentMapping.Rgba);
@@ -212,14 +210,14 @@ bool running = true;
 
 long time = Stopwatch.GetTimestamp();
 
-bool resize = true;
+bool resize = false;
 
 int frames = 0;
 
 while(running) {
-    //SDL.WaitEvent(out SDL.Event e);
+    SDL.WaitEvent(out SDL.Event e);
 
-    SDL.PollEvent(out SDL.Event e);
+    //SDL.PollEvent(out SDL.Event e);
 
     do {
         SDL.EventType type = (SDL.EventType)e.Type;
@@ -301,7 +299,7 @@ while(running) {
     handle.AddDraw([
         new(0, 0, 0, 1),
         new(1280, 0, 1, 1),
-        new(640, 720, 0.9f, 0),
+        new(640, 720, 0.9f, 0)
     ]);
 
     handle.Flush();
