@@ -268,7 +268,7 @@ while(running) {
         }
     } while(SDL.PollEvent(out e));
 
-    VkResult result = presenter.Acquire(ulong.MaxValue, out uint index, out ThImage image, out ThSemaphore semaphore);
+    VkResult result = presenter.Acquire(ulong.MaxValue, out uint index);
 
     //Console.WriteLine(result);
 
@@ -370,7 +370,7 @@ while(running) {
 
     handle.BufferFlush();
 
-    queue.Submit(fence.Handle, [presenter.Semaphore.Handle], [VkPipelineStageFlags.ColorAttachmentOutput], [commandBuffer.Handle], [semaphore.Handle]);
+    queue.Submit(fence.Handle, [presenter.Semaphore.Handle], [VkPipelineStageFlags.ColorAttachmentOutput], [commandBuffer.Handle], [presenter.PresentSemaphores[index].Handle]);
 
     result = presenter.Present(index);
 
