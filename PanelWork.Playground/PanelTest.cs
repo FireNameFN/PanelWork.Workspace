@@ -1,10 +1,13 @@
 using System;
+using PanelWork.Entities;
+using PanelWork.Primitives;
+using SDL3;
 
 namespace PanelWork.Playground;
 
 public static class PanelTest {
     public static void Run() {
-        App app = new();
+        using App app = new();
 
         AppWindow window = new(app);
 
@@ -43,6 +46,8 @@ public static class PanelTest {
         facade.Facade = new RectFacade() { Color = Color.FromRgba(0.25f, 0.25f, 0.5f, 1) };
 
         window.Content = entity;
+
+        Console.WriteLine(SDL.GetError());
 
         app.Run();
 
