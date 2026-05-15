@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Reflection;
 using GreenPng;
 using PanelWork;
+using PanelWork.Playground;
 using SDL3;
 using Thermal.Bindings;
 using Thermal.Core;
@@ -16,6 +17,10 @@ using Thermal.Primitives;
 using Thermal.Shaders;
 using Thermal.ThVk;
 using Vortice.Vulkan;
+
+PanelTest.Run();
+
+return;
 
 //SDL.SetHint("SDL_VIDEO_DRIVER", "x11");
 
