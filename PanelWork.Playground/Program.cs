@@ -18,9 +18,9 @@ using Thermal.Shaders;
 using Thermal.ThVk;
 using Vortice.Vulkan;
 
-PanelTest.Run();
+//PanelTest.Run();
 
-return;
+//return;
 
 //SDL.SetHint("SDL_VIDEO_DRIVER", "x11");
 

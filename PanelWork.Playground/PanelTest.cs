@@ -19,7 +19,7 @@ public static class PanelTest {
 
         FacadeComponent facade1 = app.entityManager.AddComponent<FacadeComponent>(entity1);
 
-        facade1.Facade = new RectFacade() { Color = new(1, 0, 1, 1) };
+        facade1.Facade = new RectFacade() { Color = Color.FromRgba(1, 0, 1, 1) };
 
         LayoutComponent layout1 = app.entityManager.AddComponent<LayoutComponent>(entity1);
 
@@ -28,7 +28,7 @@ public static class PanelTest {
 
         FacadeComponent facade2 = app.entityManager.AddComponent<FacadeComponent>(entity2);
 
-        facade2.Facade = new RectFacade() { Color = new(1, 1, 0, 1) };
+        facade2.Facade = new RectFacade() { Color = Color.FromRgba(1, 1, 0, 1) };
 
         LayoutComponent layout2 = app.entityManager.AddComponent<LayoutComponent>(entity2);
 
@@ -37,7 +37,7 @@ public static class PanelTest {
 
         LayoutComponent layout = app.entityManager.AddComponent<LayoutComponent>(entity);
 
-        layout.Children = [entity1, entity2];
+        layout.Children = [entity1, entity2, entity2];
         layout.Padding = 10;
         layout.Gap = 20;
 
