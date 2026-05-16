@@ -18,9 +18,9 @@ using Thermal.Shaders;
 using Thermal.ThVk;
 using Vortice.Vulkan;
 
-//PanelTest.Run();
+PanelTest.Run();
 
-//return;
+return;
 
 //SDL.SetHint("SDL_VIDEO_DRIVER", "x11");
 
@@ -247,6 +247,8 @@ while(running) {
 
                 colorRenderTarget.Dispose();
             }
+
+            queue.WaitIdle();
 
             presenter.SetSize(width, height);
 
