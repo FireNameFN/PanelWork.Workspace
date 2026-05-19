@@ -50,7 +50,7 @@ public static class PanelTest {
 
         LayoutComponent layout = app.entityManager.AddComponent<LayoutComponent>(entity);
 
-        layout.Children = [entity1, entity2, entity2];
+        layout.Children = [entity1, entity2];
         layout.Padding = 10;
         layout.Gap = 20;
         layout.MinWidth = 500;
