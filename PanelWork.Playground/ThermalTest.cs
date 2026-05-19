@@ -189,8 +189,6 @@ public static class ThermalTest {
 
         RoundedRect roundedRect2 = RoundedRect.Create(500, 130, 700, 280, 20, new Vector4(0.2f, 0.2f, 1, 1));
 
-        Viewport viewport = Viewport.Create(0, 0, 1280, 720);
-
         DrawContext context = new(device, storage.CreateContext(), commandBuffer.Handle);
 
         DrawHandle<Vertex, Matrix> handle = new(vertexBuffer, instanceBuffer, commandBuffer.Handle);
