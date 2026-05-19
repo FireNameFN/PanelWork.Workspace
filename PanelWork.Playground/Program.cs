@@ -48,7 +48,7 @@ Window window = new(flags: SDL.WindowFlags.Resizable);
 
 VkSurfaceKHR surface = window.CreateSurface(instance.Handle.Instance);
 
-Presenter presenter = new(device, physicalDevice, queue, surface) {
+Presenter presenter = new(physicalDevice, queue, surface) {
     Usage = VkImageUsageFlags.ColorAttachment,
     PresentMode = VkPresentModeKHR.Mailbox
 };
@@ -57,7 +57,7 @@ ThCommandPool pool = device.CreateCommmandPool(queue.QueueFamily, VkCommandPoolC
 
 ThCommandBuffer commandBuffer = pool.AllocateCommandBuffer(VkCommandBufferLevel.Primary);
 
-Command command = new(device, queue);
+Command command = new(queue);
 
 ThFence fence = device.CreateFence();
 
@@ -179,9 +179,9 @@ ThImageView textureView = texture.Image.CreateImageView(VkFormat.B8G8R8A8Srgb, V
 
 DescriptorStorage storage = new(device);
 
-VertexBuffer<Vertex> vertexBuffer = new(device, physicalDevice);
+VertexBuffer<Vertex> vertexBuffer = new(physicalDevice, device);
 
-VertexBuffer<Matrix> instanceBuffer = new(device, physicalDevice);
+VertexBuffer<Matrix> instanceBuffer = new(physicalDevice, device);
 
 Rect testRect = Rect.Create(320, 60, 600 + 320, 600 + 60);
 

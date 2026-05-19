@@ -50,7 +50,7 @@ public class FontBenchmark {
 
         instance.TryCreateDevicePreferDiscrete((_, _, _) => true, [], new(), out physicalDevice, out device, out ThQueue queue);
 
-        command = new(device, queue);
+        command = new(queue);
 
         map = font.Render(command, physicalDevice, 24);
     }
