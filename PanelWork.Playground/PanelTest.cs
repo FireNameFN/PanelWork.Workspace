@@ -1,5 +1,6 @@
 using System;
 using PanelWork.Components;
+using PanelWork.Facades;
 using SDL3;
 
 namespace PanelWork.Playground;
@@ -8,7 +9,7 @@ public static class PanelTest {
     public static void Run() {
         using App app = new();
 
-        AppWindow window = app.CreateWindow();
+        Window window = app.CreateWindow();
 
         Panel panel = app.CreatePanel();
 
