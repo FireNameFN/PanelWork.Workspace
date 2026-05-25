@@ -4,5 +4,6 @@
   <Project Path="PanelWork.Benchmarks/PanelWork.Benchmarks.csproj" />
   <Project Path="PanelWork.Playground/PanelWork.Playground.csproj" />
   <Project Path="PanelWork/PanelWork.csproj" />
+  <Project Path="Thermal.Playground/Thermal.Playground.csproj" />
   <Project Path="Thermal/Thermal.csproj" />
 </Solution>

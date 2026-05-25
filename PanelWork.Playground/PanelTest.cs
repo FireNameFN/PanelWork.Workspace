@@ -1,7 +1,6 @@
 using System;
 using PanelWork.Components;
 using PanelWork.Facades;
-using SDL3;
 
 namespace PanelWork.Playground;
 
@@ -14,7 +13,8 @@ public static class PanelTest {
         Panel panel = app.CreatePanel();
 
         panel
-            .Min(500, 0)
+            .MinWidth(500)
+            .Max(0, 0)
             .Padding(10)
             .Gap(20)
             .Facade(RectFacade.FromColor(0x3F3F7F))
@@ -32,7 +32,7 @@ public static class PanelTest {
 
         window.Content = panel.Entity;
 
-        Console.WriteLine(SDL.GetError());
+        Console.WriteLine(SDL.SDL3.SDL_GetError());
 
         app.Run();
 

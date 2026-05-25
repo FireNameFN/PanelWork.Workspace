@@ -2,10 +2,16 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug",
+            "name": "Debug PanelWork",
             "type": "dotnet",
             "request": "launch",
             "projectPath": "${workspaceFolder}/PanelWork.Playground/PanelWork.Playground.csproj"
+        },
+        {
+            "name": "Debug Thermal",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}/Thermal.Playground/Thermal.Playground.csproj"
         }
     ]
 }

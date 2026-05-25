@@ -42,7 +42,7 @@ public static class ThermalTest {
 
         instance.TryCreateDevicePreferDiscrete((physicalDevice, queueFamily, flags) => SDL.VulkanGetPresentationSupport(physicalDevice.Instance.Instance, physicalDevice.Handle, queueFamily), ["VK_KHR_swapchain"], features, out ThPhysicalDevice physicalDevice, out ThDevice device, out ThQueue queue);
 
-        OldWindow window = new(flags: SDL.WindowFlags.Resizable);
+        Window window = new(flags: SDL.WindowFlags.Resizable);
 
         VkSurfaceKHR surface = window.CreateSurface(instance.Handle.Instance);
 
@@ -122,13 +122,13 @@ public static class ThermalTest {
 
         ThSampler sampler = device.CreateSampler(VkFilter.Nearest, VkSamplerAddressMode.Repeat);
 
-        Stream trayStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Playground.Resources.tray.png");
+        Stream trayStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Thermal.Playground.Resources.tray.png");
 
         Span<byte> traySpan = stackalloc byte[(int)trayStream.Length];
 
         trayStream.ReadExactly(traySpan);
 
-        OldIcon.TryCreateFromPng(traySpan, out OldIcon icon);
+        Icon.TryCreateFromPng(traySpan, out Icon icon);
 
         nint tray = SDL.CreateTray(icon.Handle, "PanelWork");
 
@@ -143,7 +143,7 @@ public static class ThermalTest {
         Atlas atlas = new(512, 512);
 
         foreach(string name in Assembly.GetExecutingAssembly().GetManifestResourceNames()) {
-            if(!name.StartsWith("PanelWork.Playground.Resources.textures."))
+            if(!name.StartsWith("Thermal.Playground.Resources.textures."))
                 continue;
 
             using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name);
@@ -159,7 +159,7 @@ public static class ThermalTest {
 
         ThDeviceImage texture = atlas.CreateTexture(command, physicalDevice);
 
-        Stream fontStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PanelWork.Playground.Resources.inter.ttf");
+        Stream fontStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Thermal.Playground.Resources.inter.ttf");
 
         byte[] fontData = new byte[fontStream.Length];
 
