@@ -18,19 +18,20 @@ public static class PanelTest {
             .Padding(10)
             .Gap(20)
             .Facade(RectFacade.FromColor(0x3F3F7F))
-            .Add(panel.Fork()
-                .Min(100, 100)
-                .GrowWidth()
-                .Facade(RectFacade.FromColor(0xFF00FF)))
-            .Add(panel.Fork()
-                .Min(150, 150)
-                .GrowWidth()
-                .Facade(RectFacade.FromColor(0xFFFF00))
-                .Add(panel.Fork()
-                    .Min(20, 20)
-                    .Facade(RectFacade.FromColor(0x3FAF3F))));
+            .Panels(
+                panel.Fork()
+                    .Min(100, 100)
+                    .GrowWidth()
+                    .Facade(RectFacade.FromColor(0xFF00FF)),
+                panel.Fork()
+                    .Min(150, 150)
+                    .GrowWidth()
+                    .Facade(RectFacade.FromColor(0xFFFF00))
+                    .AddPanel(panel.Fork()
+                        .Min(20, 20)
+                        .Facade(RectFacade.FromColor(0x3FAF3F))));
 
-        window.Content = panel.Entity;
+        window.Panel = panel.Entity;
 
         Console.WriteLine(SDL.SDL3.SDL_GetError());
 
