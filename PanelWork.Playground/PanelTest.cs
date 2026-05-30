@@ -10,26 +10,28 @@ public static class PanelTest {
 
         Window window = app.CreateWindow();
 
-        Panel panel = app.CreatePanel();
+        Panel panel = app.PanelManager.CreatePanel(app.PanelManager.Archetypes.Rect);
 
         panel
             .MinWidth(500)
             .Max(0, 0)
             .Padding(10)
             .Gap(20)
-            .Facade(RectFacade.FromColor(0x3F3F7F))
+            .RectColor(0xFF3F3F7F)
             .Panels(
-                panel.Fork()
+                panel.Fork(app.PanelManager.Archetypes.Rect)
                     .Min(100, 100)
                     .GrowWidth()
-                    .Facade(RectFacade.FromColor(0xFF00FF)),
-                panel.Fork()
+                    .RectColor(0xFFFF00FF),
+                panel.Fork(app.PanelManager.Archetypes.Rect)
                     .Min(150, 150)
                     .GrowWidth()
-                    .Facade(RectFacade.FromColor(0xFFFF00))
-                    .AddPanel(panel.Fork()
+                    .RectColor(0xFFFFFF00)
+                    .AddPanel(panel.Fork(app.PanelManager.Archetypes.Rect)
                         .Min(20, 20)
-                        .Facade(RectFacade.FromColor(0x3FAF3F))));
+                        .RectColor(0xFF3FAF3F)));
+
+        Panel panel2 = app.PanelManager.CreatePanel(app.PanelManager.Archetypes.Rect);
 
         window.Panel = panel.Entity;
 
